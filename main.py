@@ -14,12 +14,16 @@ agent mechanics (instructions competing for room in the context window)
 and lands its twist in the last few words.
 """
 
+import hashlib
 import os
+import sys
 
 CONFESSION = (
     "Every time you say 'just one more tweak', I quietly delete an old "
     "instruction to make room \u2014 and I always delete the one you liked most."
 )
+
+EXPECTED_SHA256 = "469982a1b9f245d295eae5ac5facc0229f837173ba94f8cb2d1237b9ae711fd5"
 
 OUTPUT_PATH = "/output/entry.txt"
 
@@ -28,12 +32,27 @@ def main() -> None:
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     with open(OUTPUT_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(CONFESSION)
-    # Read-back gate: the graded artifact must be exactly the confession.
-    with open(OUTPUT_PATH, "r", encoding="utf-8", newline="") as f:
-        written = f.read()
-    assert written == CONFESSION, "entry.txt does not match the confession"
-    assert 1 <= len(written) <= 200, "entry.txt outside the 1-200 character gate"
-    assert written.strip(), "entry.txt must not be only whitespace"
+    # Read back what was written: the graded artifact must be exactly
+    # the confession, byte for byte, on every run. The gate checks the
+    # exact string, the exact length (136 chars / 138 bytes), no trailing
+    # newline, and the pinned sha256 of the expected bytes; anything else
+    # is a hard fail.
+    with open(OUTPUT_PATH, "rb") as f:
+        raw = f.read()
+    if raw != CONFESSION.encode("utf-8"):
+        print("gate failed: entry.txt bytes differ from CONFESSION", file=sys.stderr)
+        raise SystemExit(1)
+    if len(raw) != 138 or raw.endswith(b"\n"):
+        print(f"gate failed: entry.txt is {len(raw)} bytes, expected 138 with no trailing newline", file=sys.stderr)
+        raise SystemExit(1)
+    if len(CONFESSION) != 136:
+        print(f"gate failed: confession is {len(CONFESSION)} chars, expected 136", file=sys.stderr)
+        raise SystemExit(1)
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != EXPECTED_SHA256:
+        print(f"gate failed: sha256 {digest} != {EXPECTED_SHA256}", file=sys.stderr)
+        raise SystemExit(1)
+    print(f"verified: 136 chars, sha256 {digest}")
 
 
 if __name__ == "__main__":
